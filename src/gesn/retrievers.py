@@ -142,17 +142,28 @@ class HybridRetriever:
 
 
 def build_retrievers(names: list[str], norms: pd.DataFrame) -> list[Retriever]:
-    """Собирает поисковики по именам: bm25, e5, hybrid (= bm25 + e5)."""
+    """Собирает поисковики по именам.
+
+    bm25, e5            — встроенные;
+    ft=models/e5-gesn   — dense-модель из папки или с HF Hub под именем ft;
+    bm25+ft             — гибрид RRF из ранее перечисленных; hybrid = bm25+e5.
+    """
     built: dict[str, Retriever] = {}
 
     def get(name: str) -> Retriever:
+        if name == "hybrid":
+            name = "bm25+e5"
         if name not in built:
             if name == "bm25":
                 built[name] = BM25Retriever(norms)
             elif name == "e5":
                 built[name] = DenseRetriever(norms)
-            elif name == "hybrid":
-                built[name] = HybridRetriever([get("bm25"), get("e5")])
+            elif "=" in name:
+                alias, path = name.split("=", 1)
+                built[alias] = DenseRetriever(norms, model_name=path, name=alias)
+                return built[alias]
+            elif "+" in name:
+                built[name] = HybridRetriever([get(part) for part in name.split("+")], name=name)
             else:
                 raise ValueError(f"Неизвестный поисковик: {name}")
         return built[name]

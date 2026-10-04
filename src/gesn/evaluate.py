@@ -101,17 +101,20 @@ def main() -> None:
     parser.add_argument("--qrels", type=Path, default=Path("data/test/qrels.jsonl"))
     parser.add_argument("--methods", nargs="+", default=["bm25", "e5", "hybrid"])
     parser.add_argument("--no-ci", action="store_true", help="Не считать доверительные интервалы")
+    parser.add_argument("--out", type=Path, help="Сохранить таблицы в markdown-файл")
     args = parser.parse_args()
 
     qrels = load_qrels(args.qrels)
     norms = load_norms()
     results = {r.name: evaluate(r, qrels) for r in build_retrievers(args.methods, norms)}
 
-    print(f"Запросов: {len(qrels)}\n")
+    parts = [f"Набор: `{args.qrels}`, запросов: {len(qrels)}\n"]
     for level, title in (("code", "Точный код нормы"), ("table", "Таблица")):
-        print(f"### {title}\n")
-        print(format_table(results, level, with_ci=not args.no_ci))
-        print()
+        parts.append(f"### {title}\n\n{format_table(results, level, with_ci=not args.no_ci)}\n")
+    report = "\n".join(parts)
+    print(report)
+    if args.out:
+        args.out.write_text(report, encoding="utf-8")
 
 
 if __name__ == "__main__":

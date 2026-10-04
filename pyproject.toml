@@ -14,6 +14,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+train = ["accelerate>=1.1.0", "datasets", "transformers", "tqdm"]
 
 [build-system]
 requires = ["setuptools>=69"]
