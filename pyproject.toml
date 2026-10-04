@@ -1,0 +1,19 @@
+[project]
+name = "gesn-search"
+version = "0.1.0"
+description = "Поиск кодов ГЭСН по описанию в свободной форме: BM25 vs эмбеддинги vs дообученная модель"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.2",
+    "pyarrow>=16",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
