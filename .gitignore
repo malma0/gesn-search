@@ -3,5 +3,6 @@ __pycache__/
 *.egg-info/
 data/raw/
 data/*.parquet
+!data/norms.parquet
 data/cache/
 data/test/pool/
