@@ -1,4 +1,0 @@
-sentence-transformers>=5.0
-pandas
-pyarrow
-numpy

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Поиск кода ГЭСН</title>
+<style>
+  :root { --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4; --accent: #1d4ed8; --card: #ffffff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1c1917; --fg: #f5f5f4; --muted: #a8a29e; --line: #44403c; --accent: #93c5fd; --card: #292524; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 8px; }
+  p.lead { color: var(--muted); margin: 0 0 24px; }
+  form { display: flex; gap: 8px; }
+  input { flex: 1; min-width: 0; padding: 12px 14px; font: inherit; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); }
+  button { padding: 12px 18px; font: inherit; border: 0; border-radius: 8px; background: var(--accent); color: var(--bg); cursor: pointer; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .examples { margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .examples a { color: var(--accent); cursor: pointer; font-size: 14px; }
+  #status { color: var(--muted); font-size: 14px; margin: 16px 0; min-height: 21px; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 13px; color: var(--muted); font-weight: 500; }
+  td.code { font-family: ui-monospace, monospace; white-space: nowrap; }
+  td.num { color: var(--muted); font-variant-numeric: tabular-nums; }
+  footer { margin-top: 32px; color: var(--muted); font-size: 14px; }
+  footer a { color: var(--accent); }
+  @media (max-width: 600px) { td.unit, th.unit { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Поиск кода ГЭСН</h1>
+  <p class="lead">Опишите работу своими словами — модель найдёт подходящие нормы ГЭСН-2022 (сборники 06, 08, 10, 11, 12, 15; 2940 норм). Поиск работает прямо в браузере.</p>
+  <form id="form">
+    <input id="q" placeholder="например: покрасить потолок в спальне" autocomplete="off">
+    <button id="go" disabled>Найти</button>
+  </form>
+  <div class="examples" id="examples"></div>
+  <div id="status">Загрузка модели (~280 МБ, только при первом открытии)…</div>
+  <div id="results"></div>
+  <footer>
+    Модель: <a id="model-link" href="#">e5-gesn</a> — <code>multilingual-e5-base</code>, дообученная на синтетических парах «запрос ↔ норма».
+    Код, данные и метрики: <a href="https://github.com/malma0/gesn-search">github.com/malma0/gesn-search</a>.
+  </footer>
+</main>
+<script type="module">
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3";
+
+env.allowLocalModels = false;
+const DIM = 768, TOP_K = 10;
+const EXAMPLES = ["покрасить стены в квартире", "залить стяжку 5 см", "перекрыть крышу металлочерепицей", "перегородка из гипсокартона", "положить ламинат"];
+
+const $ = (id) => document.getElementById(id);
+const status = (t) => { $("status").textContent = t; };
+const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+for (const e of EXAMPLES) {
+  const a = document.createElement("a");
+  a.textContent = e;
+  a.onclick = () => { $("q").value = e; run(); };
+  $("examples").append(a);
+}
+
+const modelId = (await (await fetch("model_id.txt")).text()).trim();
+$("model-link").href = `https://huggingface.co/${modelId}`;
+
+let norms, vectors, extractor;
+try {
+  [norms, vectors, extractor] = await Promise.all([
+    fetch("norms.json").then((r) => r.json()),
+    fetch("embeddings.bin").then((r) => r.arrayBuffer()).then((b) => new Float32Array(b)),
+    pipeline("feature-extraction", modelId, {
+      dtype: "q8",
+      progress_callback: (p) => { if (p.status === "progress" && p.file?.endsWith(".onnx")) status(`Загрузка модели: ${Math.round(p.progress)}%`); },
+    }),
+  ]);
+} catch (err) {
+  status(`Не удалось загрузить модель: ${err.message}`);
+  throw err;
+}
+status("Готово. Введите запрос.");
+$("go").disabled = false;
+
+async function run() {
+  const query = $("q").value.trim();
+  if (!query) return;
+  $("go").disabled = true;
+  const out = await extractor("query: " + query, { pooling: "mean", normalize: true });
+  const q = out.data;
+  const scores = new Float32Array(norms.length);
+  for (let i = 0; i < norms.length; i++) {
+    let s = 0;
+    const off = i * DIM;
+    for (let j = 0; j < DIM; j++) s += vectors[off + j] * q[j];
+    scores[i] = s;
+  }
+  const top = [...scores.keys()].sort((a, b) => scores[b] - scores[a]).slice(0, TOP_K);
+  $("results").innerHTML = `<table><thead><tr><th>Код</th><th>Работа</th><th class="unit">Ед. изм.</th><th>Сходство</th></tr></thead><tbody>${
+    top.map((i) => `<tr><td class="code">${norms[i].code}</td><td>${escapeHtml(norms[i].name)}</td><td class="unit">${escapeHtml(norms[i].unit)}</td><td class="num">${scores[i].toFixed(3)}</td></tr>`).join("")
+  }</tbody></table>`;
+  status(`Запрос: «${query}»`);
+  $("go").disabled = false;
+}
+
+$("form").onsubmit = (e) => { e.preventDefault(); run(); };
+</script>
+</body>
+</html>
