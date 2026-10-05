@@ -39,8 +39,18 @@ def export_onnx(model_dir: str, out_dir: Path) -> None:
     from onnxruntime.quantization import QuantType, quantize_dynamic
     from transformers import AutoModel, AutoTokenizer
 
+    class Encoder(torch.nn.Module):
+        """Только именованные аргументы: позиционные в transformers v5 съезжают на use_cache."""
+
+        def __init__(self, inner):
+            super().__init__()
+            self.inner = inner
+
+        def forward(self, input_ids, attention_mask):
+            return self.inner(input_ids=input_ids, attention_mask=attention_mask, return_dict=True).last_hidden_state
+
     tok = AutoTokenizer.from_pretrained(model_dir)
-    model = AutoModel.from_pretrained(model_dir, attn_implementation="eager").eval()
+    model = Encoder(AutoModel.from_pretrained(model_dir, attn_implementation="eager")).eval()
     sample = tok(["query: пример"], return_tensors="pt")
 
     out_dir.mkdir(parents=True, exist_ok=True)
