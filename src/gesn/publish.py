@@ -93,7 +93,10 @@ def main() -> None:
     model_id, space_id = f"{user}/{args.model_name}", f"{user}/{args.space_name}"
 
     SentenceTransformer(args.model_dir).push_to_hub(
-        model_id, token=token, commit_message="e5-base, дообученная на синтетических парах запрос↔норма ГЭСН"
+        model_id,
+        token=token,
+        exist_ok=True,
+        commit_message="e5-base, дообученная на синтетических парах запрос↔норма ГЭСН",
     )
     with tempfile.TemporaryDirectory() as tmp:
         export_onnx(args.model_dir, Path(tmp) / "onnx")
