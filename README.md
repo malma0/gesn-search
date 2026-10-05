@@ -8,7 +8,8 @@
 3. Та же модель, дообученная на синтетических парах «запрос ↔ норма».
 4. Гибриды BM25 + dense через Reciprocal Rank Fusion.
 
-> 🚧 В работе: пересчёт на исправленной разметке и демо. План — в [PLAN.md](PLAN.md).
+**Демо:** [huggingface.co/spaces/malma0/gesn-search](https://huggingface.co/spaces/malma0/gesn-search) — поиск работает прямо в браузере (transformers.js, ONNX int8).  
+**Модель:** [malma0/e5-gesn](https://huggingface.co/malma0/e5-gesn)
 
 ## Результаты
 
@@ -35,6 +36,8 @@
 | BM25 + e5 дообученная | 0.428 | 0.732 | 0.819 | 0.563 |
 
 Полные таблицы: [results/test.md](results/test.md), синтетический dev (532 запроса к отложенным нормам): [results/dev.md](results/dev.md).
+
+После доразметки теста (v2, см. [LABELING.md](data/test/LABELING.md)) картина та же: R@1 по коду — BM25 0.283, e5 0.391, дообученная 0.529; таблица в top-10 — 0.616 / 0.746 / 0.906. Таблицы выше посчитаны на исходной разметке v1.
 
 **Значимость** (парное сравнение на одних и тех же запросах, [results/significance.md](results/significance.md)):
 
