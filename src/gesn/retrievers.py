@@ -76,7 +76,7 @@ class BM25Retriever:
 
     def search(self, query: str, k: int = 10) -> list[str]:
         scores = self.scores(query)
-        top = np.argsort(-scores)[:k]
+        top = np.argsort(-scores, kind="stable")[:k]
         return [self.codes[i] for i in top if scores[i] > 0]
 
 
@@ -118,7 +118,7 @@ class DenseRetriever:
         return self.embeddings @ q
 
     def search(self, query: str, k: int = 10) -> list[str]:
-        top = np.argsort(-self.scores(query))[:k]
+        top = np.argsort(-self.scores(query), kind="stable")[:k]
         return [self.codes[i] for i in top]
 
 

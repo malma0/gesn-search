@@ -47,3 +47,19 @@ class Fixed:
 def test_hybrid_rrf_rewards_agreement():
     hybrid = HybridRetriever([Fixed("a", ["x", "y", "z"]), Fixed("b", ["y", "z", "x"])])
     assert hybrid.search("q", 3)[0] == "y"
+
+
+def test_mcnemar_exact():
+    from gesn.analyze import mcnemar_exact
+
+    same = np.array([1, 0, 1, 0])
+    assert mcnemar_exact(same, same) == 1.0
+    a, b = np.array([1] * 10), np.array([0] * 10)
+    assert mcnemar_exact(a, b) == 2 / 2**10
+
+
+def test_paired_bootstrap_sign():
+    from gesn.analyze import paired_bootstrap
+
+    lo, hi = paired_bootstrap(np.ones(50), np.zeros(50))
+    assert lo == hi == 1.0
