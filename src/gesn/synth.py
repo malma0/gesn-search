@@ -25,8 +25,15 @@ def jaccard(a: set[str], b: set[str]) -> float:
     return len(a & b) / len(a | b) if a and b else 0.0
 
 
-def clean_queries(raw: list[dict], norms: pd.DataFrame, max_copy: float = 0.8) -> list[dict]:
-    """Фильтры: длина, запрещённые слова, почти дословная копия названия, неоднозначные дубли."""
+def clean_queries(
+    raw: list[dict], norms: pd.DataFrame, max_copy: float = 0.8, keep_ambiguous: bool = False
+) -> list[dict]:
+    """Фильтры: длина, запрещённые слова, почти дословная копия названия, неоднозначные дубли.
+
+    keep_ambiguous: запрос, сгенерированный для норм из разных таблиц, не выбрасывается, а остаётся
+    парой с каждой из них (multi-positive). Сэмплер NO_DUPLICATES при обучении не кладёт
+    одинаковые запросы в один батч, поэтому они не становятся друг другу ложными негативами.
+    """
     names = dict(zip(norms["code"], norms["full_name"]))
     tables = dict(zip(norms["code"], norms["table_code"]))
     stats: Counter[str] = Counter()
@@ -35,7 +42,7 @@ def clean_queries(raw: list[dict], norms: pd.DataFrame, max_copy: float = 0.8) -
         code = row["code"]
         name_tokens = set(tokenize(names[code]))
         seen = set()
-        for q in row["queries"]:
+        for q in row.get("queries") or row.get("items", []):
             q = re.sub(r"\s+", " ", q).strip(" .«»\"'")
             key = q.lower()
             if not 2 <= len(q.split()) <= 25:
@@ -50,13 +57,17 @@ def clean_queries(raw: list[dict], norms: pd.DataFrame, max_copy: float = 0.8) -
                 seen.add(key)
                 pairs.append({"query": q, "code": code})
 
-    # один и тот же запрос у норм из разных таблиц — неоднозначен, выбрасываем
+    # один и тот же запрос у норм из разных таблиц — неоднозначен
     tables_by_query: dict[str, set[str]] = {}
     for p in pairs:
         tables_by_query.setdefault(p["query"].lower(), set()).add(tables[p["code"]])
     ambiguous = {q for q, ts in tables_by_query.items() if len(ts) > 1}
-    stats["неоднозначные"] = sum(p["query"].lower() in ambiguous for p in pairs)
-    pairs = [p for p in pairs if p["query"].lower() not in ambiguous]
+    n_ambiguous = sum(p["query"].lower() in ambiguous for p in pairs)
+    if keep_ambiguous:
+        print(f"Неоднозначных пар оставлено: {n_ambiguous}")
+    else:
+        stats["неоднозначные"] = n_ambiguous
+        pairs = [p for p in pairs if p["query"].lower() not in ambiguous]
 
     print("Отброшено:", dict(stats))
     return pairs
@@ -97,16 +108,20 @@ def main() -> None:
     parser.add_argument("--raw", type=Path, default=TRAIN_DIR / "synth_raw.jsonl")
     parser.add_argument("--dev-share", type=float, default=0.05)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--keep-ambiguous", action="store_true", help="Не выбрасывать запросы к нормам из разных таблиц")
+    parser.add_argument("--out-dir", type=Path, default=TRAIN_DIR)
     args = parser.parse_args()
 
     norms = load_norms()
     with args.raw.open(encoding="utf-8") as f:
         raw = [json.loads(line) for line in f if line.strip()]
-    print(f"Норм: {len(raw)}, сырых запросов: {sum(len(r['queries']) for r in raw)}")
+    print(f"Норм: {len(raw)}, сырых запросов: {sum(len(r.get('queries') or r.get('items', [])) for r in raw)}")
 
-    train_pairs, dev_pairs = split_by_norm(clean_queries(raw, norms), args.dev_share, args.seed)
-    write_jsonl(TRAIN_DIR / "train.jsonl", build_triplets(train_pairs, norms, args.seed))
-    write_jsonl(TRAIN_DIR / "dev.jsonl", [{"query": p["query"], "relevant": [p["code"]]} for p in dev_pairs])
+    pairs = clean_queries(raw, norms, keep_ambiguous=args.keep_ambiguous)
+    train_pairs, dev_pairs = split_by_norm(pairs, args.dev_share, args.seed)
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    write_jsonl(args.out_dir / "train.jsonl", build_triplets(train_pairs, norms, args.seed))
+    write_jsonl(args.out_dir / "dev.jsonl", [{"query": p["query"], "relevant": [p["code"]]} for p in dev_pairs])
     print(f"train: {len(train_pairs)} троек; dev: {len(dev_pairs)} запросов")
 
 

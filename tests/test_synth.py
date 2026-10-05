@@ -53,3 +53,24 @@ def test_split_by_norm_keeps_norm_queries_together():
 def test_parse_llm_answer():
     assert parse('Вот: ["залить стяжку", "стяжка 5 см"]') == ["залить стяжку", "стяжка 5 см"]
     assert parse("без json") == []
+
+
+def test_clean_queries_keep_ambiguous_and_items_key():
+    raw = [
+        {"code": "11-01-011-01", "items": ["сделать ремонт пола"]},
+        {"code": "15-04-005-01", "items": ["сделать ремонт пола"]},
+    ]
+    assert clean_queries(raw, NORMS) == []
+    assert [p["code"] for p in clean_queries(raw, NORMS, keep_ambiguous=True)] == ["11-01-011-01", "15-04-005-01"]
+
+
+def test_build_prompt_with_glossary():
+    from types import SimpleNamespace
+
+    from gesn.generate import build_prompt
+
+    row = SimpleNamespace(full_name="Устройство стяжек", collection_name="Полы", unit="100 м2", content="")
+    assert "Как это называют" not in build_prompt(row)
+    prompt = build_prompt(row, ["стяжка", "заливка пола"])
+    assert "Как это называют в разговоре: стяжка, заливка пола" in prompt
+    assert "используй разговорные названия" in prompt
